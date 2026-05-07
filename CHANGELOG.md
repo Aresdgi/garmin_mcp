@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Hip thrust/Glute bridges (6 aliases)
   - Plus: Cardio, Olympic lifts, stretches, and more
 - Your AI assistant can now recommend exercises in **natural Spanish gym language** and they will automatically map to Garmin's official codes.
+- **Fuzzy matching** — If an exact Spanish alias is not found, the system now performs intelligent keyword matching against the English catalog, translating common Spanish gym terms to English. For example:
+  - "curl de bíceps inclinado" → matches an incline curl exercise
+  - "peso muerto rumano" → matches a Romanian deadlift
+  - "sentadilla con barra" → matches a barbell squat
 
 ### Enhanced
 

@@ -73,10 +73,10 @@ def test_build_strength_json_structure():
     assert nested[0]["exerciseName"] == "SQUAT"
     assert nested[1]["stepType"]["stepTypeKey"] == "rest"
     assert nested[1]["endConditionValue"] == 90.0
-    # Second exercise: unknown exercise falls back to free-text exerciseName
+    # Second exercise: fuzzy matched ("Curl de biceps" matches English catalog)
     nested2 = steps[1]["workoutSteps"]
-    assert nested2[0]["exerciseName"] == "Curl de biceps"
-    assert "category" not in nested2[0]
+    assert nested2[0]["category"] == "CURL"
+    assert nested2[0]["exerciseName"] == "ALTERNATING_DUMBBELL_BICEPS_CURL"
 
 
 def test_lookup_exercise_spanish_alias():
@@ -91,8 +91,21 @@ def test_lookup_exercise_english_catalog():
     assert exercise_name == "BARBELL_BENCH_PRESS"
 
 
+def test_lookup_exercise_fuzzy_matching():
+    """Fuzzy matching finds English exercises from Spanish descriptions."""
+    # "curl de biceps inclinado" should match a curl exercise
+    category, exercise_name = _lookup_exercise("curl de biceps inclinado")
+    assert category == "CURL"
+    assert "BICEPS" in exercise_name
+
+    # "peso muerto rumano" should match a deadlift exercise
+    category, exercise_name = _lookup_exercise("peso muerto rumano")
+    assert category == "DEADLIFT"
+    assert "DEADLIFT" in exercise_name
+
+
 def test_lookup_exercise_fallback():
-    category, exercise_name = _lookup_exercise("Ejercicio Inventado")
+    category, exercise_name = _lookup_exercise("Ejercicio Totalmente Inventado XYZ123")
     assert category is None
     assert exercise_name is None
 

@@ -419,27 +419,137 @@ EXERCISE_CATALOG_ES = {
 }
 
 
+def _normalize_text(text: str) -> str:
+    """Normalize text for fuzzy matching: lowercase, remove accents."""
+    import unicodedata
+    text = text.lower().strip()
+    text = unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode('ASCII')
+    return text
+
+
+# Spanish → English keyword translations for fuzzy matching
+_ES_TO_EN_KEYWORDS = {
+    'inclinado': 'incline',
+    'declinado': 'decline',
+    'alternado': 'alternating',
+    'sentado': 'seated',
+    'de pie': 'standing',
+    'con barra': 'barbell',
+    'con mancuernas': 'dumbbell',
+    'mancuernas': 'dumbbell',
+    'en maquina': 'machine',
+    'maquina': 'machine',
+    'cable': 'cable',
+    'banda': 'band',
+    'bosu': 'bosu',
+    'swiss': 'swiss',
+    'pelota': 'ball',
+    'una pierna': 'single leg',
+    'pierna': 'leg',
+    'brazo': 'arm',
+    'gemelos': 'calf',
+    'cuadriceps': 'quad',
+    'isquiotibiales': 'hamstring',
+    'gluteos': 'glute',
+    'espalda': 'back',
+    'pecho': 'chest',
+    'hombros': 'shoulder',
+    'biceps': 'biceps',
+    'triceps': 'triceps',
+    'abdominales': 'abs',
+    'oblicuos': 'oblique',
+    'lumbar': 'lower back',
+    'elevacion': 'raise',
+    'extensión': 'extension',
+    'rumano': 'romanian',
+    'sumo': 'sumo',
+    'stiff': 'stiff',
+    'hexagonal': 'hex',
+    'frontal': 'front',
+    'hack': 'hack',
+    'goblet': 'goblet',
+    'pistol': 'pistol',
+    'sissy': 'sissy',
+    'bulgaro': 'bulgarian',
+    'aereo': 'air',
+    'box': 'box',
+    'con salto': 'jump',
+    'isometrico': 'wall',
+    'curl': 'curl',
+    'press': 'press',
+    'remo': 'row',
+    'dominada': 'pull',
+    'flexion': 'push',
+    'fondo': 'dip',
+    'zancada': 'lunge',
+    'sentadilla': 'squat',
+    'plancha': 'plank',
+    'peso muerto': 'deadlift',
+}
+
+
+def _extract_keywords(text: str) -> set:
+    """Extract meaningful keywords from exercise name, translating Spanish to English."""
+    common_words = {'de', 'con', 'en', 'por', 'para', 'el', 'la', 'los', 'las', 'un', 'una', 'y', 'o', 'the', 'with', 'on', 'at', 'to', 'for', 'and'}
+    normalized = _normalize_text(text)
+    
+    # First try multi-word translations
+    for es_phrase, en_phrase in _ES_TO_EN_KEYWORDS.items():
+        if es_phrase in normalized:
+            normalized = normalized.replace(es_phrase, en_phrase)
+    
+    words = normalized.split()
+    return {w for w in words if len(w) > 2 and w not in common_words}
+
+
+def _fuzzy_lookup(ex_name: str) -> Tuple[Optional[str], Optional[str]]:
+    """Fuzzy match: find best English exercise matching keywords from Spanish name."""
+    keywords = _extract_keywords(ex_name)
+    if not keywords:
+        return None, None
+
+    best_match = None
+    best_score = 0
+
+    for en_name, mapping in _EXERCISE_CATALOG_EN.items():
+        en_keywords = _extract_keywords(en_name)
+        # Count how many keywords match
+        matches = len(keywords & en_keywords)
+        if matches > best_score:
+            best_score = matches
+            best_match = mapping
+
+    # Require at least 2 keyword matches or 1 if only 1 keyword provided
+    min_matches = min(2, len(keywords))
+    if best_match and best_score >= min_matches:
+        return best_match.get("category"), best_match.get("exerciseName")
+
+    return None, None
+
+
 def _lookup_exercise(ex_name: str) -> Tuple[Optional[str], Optional[str]]:
     """Lookup an exercise name in the Garmin catalog.
 
     Priority:
-      1. Spanish aliases (EXERCISE_CATALOG_ES)
-      2. English names from full Garmin catalog (_EXERCISE_CATALOG_EN)
-      3. Return (None, None) for fallback
+      1. Spanish aliases (EXERCISE_CATALOG_ES) - exact match
+      2. English names from full catalog (_EXERCISE_CATALOG_EN) - exact match
+      3. Fuzzy matching against English catalog (keyword search)
+      4. Return (None, None) for fallback
 
     Returns (category, exerciseName) if found, otherwise (None, None).
     """
-    # 1. Try Spanish aliases first
+    # 1. Try Spanish aliases first (exact)
     mapping = EXERCISE_CATALOG_ES.get(ex_name)
     if mapping:
         return mapping.get("category"), mapping.get("exerciseName")
 
-    # 2. Try English names from full catalog
+    # 2. Try English names from full catalog (exact)
     mapping = _EXERCISE_CATALOG_EN.get(ex_name)
     if mapping:
         return mapping.get("category"), mapping.get("exerciseName")
 
-    return None, None
+    # 3. Fuzzy matching (e.g., "curl de biceps inclinado" → "Incline Dumbbell Biceps Curl")
+    return _fuzzy_lookup(ex_name)
 
 
 def build_strength_json(
