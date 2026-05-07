@@ -1,12 +1,31 @@
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/taxuspt-garmin-mcp-badge.png)](https://mseep.ai/app/taxuspt-garmin-mcp)
+# Garmin MCP Server — Enhanced Fork
 
-# Garmin MCP Server
+> This is an **enhanced fork** of [Taxuspt/garmin_mcp](https://github.com/Taxuspt/garmin_mcp), originally licensed under MIT. This fork adds AI-powered workout builders, a full Garmin exercise catalog (1500+ exercises), and time-based exercise support.
+>
+> All original functionality from upstream is preserved and maintained.
 
 This Model Context Protocol (MCP) server connects to Garmin Connect and exposes your fitness and health data to Claude and other MCP-compatible clients.
 
 Garmin's API is accessed via the awesome [python-garminconnect](https://github.com/cyberjunky/python-garminconnect) library.
 
-## Features
+## ✨ Enhanced Features (This Fork)
+
+- **High-Level Workout Builders** — Create and schedule workouts without writing raw Garmin JSON
+- **Full Exercise Catalog** — 1500+ Garmin exercises with automatic name-to-code mapping
+- **Time-Based Exercises** — Support for isometric holds (plank, wall sit, etc.) with duration in seconds
+- **Bilingual Exercise Names** — Spanish aliases + English catalog lookup
+- **AI-Ready** — Your LLM can search exercises and create structured workouts automatically
+
+## Base Features (from upstream)
+
+- List recent activities with pagination support
+- Get detailed activity information
+- Access health metrics (steps, heart rate, sleep, stress, respiration)
+- View body composition data
+- Track training status and readiness
+- Manage gear and equipment
+- Access workouts and training plans
+- Weekly health aggregates (steps, stress, intensity minutes)
 
 - List recent activities with pagination support
 - Get detailed activity information
@@ -48,7 +67,7 @@ Some endpoints are not implemented due to performance or complexity consideratio
 - `delete_activity()`, `delete_blood_pressure()` - Destructive operations require careful consideration.
 - Internal/Auth methods: `login()`, `resume_login()`, `connectapi()`, `download()` - Handled automatically by the library.
 
-If you need any of these endpoints, please [open an issue](https://github.com/Taxuspt/garmin_mcp/issues).
+If you need any of these endpoints, please [open an issue](https://github.com/Aresdgi/garmin_mcp/issues).
 
 ## High-level workout tools
 
@@ -151,7 +170,7 @@ Before adding to Claude Desktop, authenticate once in your terminal:
 ```bash
 
 # Install and run authentication tool
-uvx --python 3.12 --from git+https://github.com/Taxuspt/garmin_mcp garmin-mcp-auth
+uvx --python 3.12 --from git+https://github.com/Aresdgi/garmin_mcp garmin-mcp-auth
 
 # You'll be prompted for:
 # - Email (or set GARMIN_EMAIL env var)
@@ -189,7 +208,7 @@ Add to your Claude Desktop MCP settings **WITHOUT** credentials:
         "--python",
         "3.12",
         "--from",
-        "git+https://github.com/Taxuspt/garmin_mcp",
+        "git+https://github.com/Aresdgi/garmin_mcp",
         "garmin-mcp"
       ]
     }
@@ -250,7 +269,7 @@ For Claude Desktop, add `GARMIN_IS_CN` to the `env` section:
         "--python",
         "3.12",
         "--from",
-        "git+https://github.com/Taxuspt/garmin_mcp",
+        "git+https://github.com/Aresdgi/garmin_mcp",
         "garmin-mcp"
       ],
       "env": {
@@ -297,7 +316,7 @@ You have two options to run the MCP locally with Claude.
         "--python",
         "3.12",
         "--from",
-        "git+https://github.com/Taxuspt/garmin_mcp",
+        "git+https://github.com/Aresdgi/garmin_mcp",
         "garmin-mcp"
       ],
       "env": {
@@ -487,7 +506,7 @@ which uvx
         "--python",
         "3.12",
         "--from",
-        "git+https://github.com/Taxuspt/garmin_mcp",
+        "git+https://github.com/Aresdgi/garmin_mcp",
         "garmin-mcp"
       ]
     }
@@ -554,7 +573,7 @@ chmod 600 ~/.garmin_email ~/.garmin_password
 
 # Run server interactively to authenticate
 GARMIN_EMAIL_FILE=~/.garmin_email GARMIN_PASSWORD_FILE=~/.garmin_password \
-  uvx --python 3.12 --from git+https://github.com/Taxuspt/garmin_mcp garmin-mcp
+  uvx --python 3.12 --from git+https://github.com/Aresdgi/garmin_mcp garmin-mcp
 
 # Enter MFA code when prompted
 # Tokens will be saved automatically
@@ -572,7 +591,7 @@ After initial authentication, configure Claude Desktop **without** credentials (
         "--python",
         "3.12",
         "--from",
-        "git+https://github.com/Taxuspt/garmin_mcp",
+        "git+https://github.com/Aresdgi/garmin_mcp",
         "garmin-mcp"
       ]
     }
