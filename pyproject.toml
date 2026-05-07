@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "garmin-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Enhanced MCP server for Garmin Connect with AI-powered workout builders and full exercise catalog"
 readme = "README.md"
 requires-python = ">=3.10"

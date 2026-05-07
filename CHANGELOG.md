@@ -5,6 +5,30 @@ All notable changes to this enhanced fork will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-07
+
+### Added
+
+- **183 Spanish exercise aliases** — Comprehensive mapping of common gym exercise names in Spanish to Garmin's internal codes. Covers all major movement patterns:
+  - Sentadillas/Squats (18 aliases including variations)
+  - Press banca/Bench press (8 aliases)
+  - Peso muerto/Deadlift (8 aliases)
+  - Dominadas/Pull-ups (8 aliases)
+  - Flexiones/Push-ups (10 aliases)
+  - Curl bíceps/Bicep curls (9 aliases)
+  - Zancadas/Lunges (7 aliases)
+  - Plancha/Planks (9 aliases)
+  - Abdominales/Crunches (8 aliases)
+  - Press militar/Shoulder press (6 aliases)
+  - Remo/Rows (10 aliases)
+  - Hip thrust/Glute bridges (6 aliases)
+  - Plus: Cardio, Olympic lifts, stretches, and more
+- Your AI assistant can now recommend exercises in **natural Spanish gym language** and they will automatically map to Garmin's official codes.
+
+### Enhanced
+
+- **`EXERCISE_CATALOG_ES`** — Expanded from 9 to 183 entries, covering the vast majority of exercises used in typical strength training programs.
+
 ## [0.2.0] - 2026-05-07
 
 ### Added
