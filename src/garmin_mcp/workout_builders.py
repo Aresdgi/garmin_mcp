@@ -179,8 +179,12 @@ def build_strength_json(
 ) -> dict:
     """Build the Garmin Connect JSON for a strength workout.
 
-    Each exercise maps to a generic step; if the name is not recognised in the
-    Garmin catalog we use 'Other' and put the original name in exerciseName.
+    Each exercise becomes a RepeatGroupDTO with numberOfIterations = sets.
+    Inside each repeat group:
+      - ExecutableStepDTO (interval) targeting reps (conditionTypeId: 10)
+      - ExecutableStepDTO (rest) with configured rest time
+
+    The last rest step of each exercise is skipped via skipLastRestStep.
     """
     steps: List[dict] = []
     step_order = 1
@@ -191,31 +195,45 @@ def build_strength_json(
         reps = int(ex.get("reps", 1))
         rest_seconds = int(ex.get("rest_seconds", 60))
 
-        # Work step
-        steps.append({
+        nested_steps: List[dict] = []
+        nested_order = 1
+
+        # Work step (reps target)
+        nested_steps.append({
             "type": "ExecutableStepDTO",
-            "stepOrder": step_order,
+            "stepOrder": nested_order,
             "stepType": {"stepTypeId": 3, "stepTypeKey": "interval"},
-            "description": f"{ex_name}: {sets} sets x {reps} reps",
-            "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
-            "endConditionValue": float(sets * 45),  # rough estimate: 45s per set
-            "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target"},
+            "description": f"{ex_name}: {sets}x{reps}",
+            "endCondition": {"conditionTypeId": 10, "conditionTypeKey": "reps", "displayOrder": 10, "displayable": True},
+            "endConditionValue": float(reps),
+            "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
             "exerciseName": ex_name,
         })
-        step_order += 1
+        nested_order += 1
 
-        # Rest step (skip after last exercise)
-        if rest_seconds > 0 and ex != exercises[-1]:
-            steps.append({
-                "type": "ExecutableStepDTO",
-                "stepOrder": step_order,
-                "stepType": {"stepTypeId": 4, "stepTypeKey": "recovery"},
-                "description": f"Rest {rest_seconds}s",
-                "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
-                "endConditionValue": float(rest_seconds),
-                "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target"},
-            })
-            step_order += 1
+        # Rest step
+        nested_steps.append({
+            "type": "ExecutableStepDTO",
+            "stepOrder": nested_order,
+            "stepType": {"stepTypeId": 5, "stepTypeKey": "rest", "displayOrder": 5},
+            "description": f"Rest {rest_seconds}s",
+            "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time", "displayOrder": 2, "displayable": True},
+            "endConditionValue": float(rest_seconds),
+            "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
+        })
+
+        steps.append({
+            "type": "RepeatGroupDTO",
+            "stepOrder": step_order,
+            "stepType": {"stepTypeId": 6, "stepTypeKey": "repeat", "displayOrder": 6},
+            "numberOfIterations": sets,
+            "workoutSteps": nested_steps,
+            "endCondition": {"conditionTypeId": 7, "conditionTypeKey": "iterations", "displayOrder": 7, "displayable": False},
+            "endConditionValue": float(sets),
+            "skipLastRestStep": True,
+            "smartRepeat": False,
+        })
+        step_order += 1
 
     return {
         "workoutName": name,

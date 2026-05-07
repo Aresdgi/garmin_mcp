@@ -58,7 +58,16 @@ def test_build_strength_json_structure():
     assert result["sportType"]["sportTypeKey"] == "strength_training"
     assert result["sportType"]["sportTypeId"] == 5
     steps = result["workoutSegments"][0]["workoutSteps"]
-    # 2 exercises + 1 rest between them = 3 steps
-    assert len(steps) == 3
-    assert steps[0]["exerciseName"] == "Sentadillas"
-    assert steps[2]["exerciseName"] == "Flexiones"
+    # Each exercise is a RepeatGroupDTO
+    assert len(steps) == 2
+    # First exercise: RepeatGroup with 3 iterations
+    assert steps[0]["type"] == "RepeatGroupDTO"
+    assert steps[0]["numberOfIterations"] == 3
+    assert steps[0]["skipLastRestStep"] is True
+    nested = steps[0]["workoutSteps"]
+    assert len(nested) == 2  # work + rest
+    assert nested[0]["endCondition"]["conditionTypeKey"] == "reps"
+    assert nested[0]["endConditionValue"] == 12.0
+    assert nested[0]["exerciseName"] == "Sentadillas"
+    assert nested[1]["stepType"]["stepTypeKey"] == "rest"
+    assert nested[1]["endConditionValue"] == 90.0
