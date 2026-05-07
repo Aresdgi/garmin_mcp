@@ -5,6 +5,7 @@ from garmin_mcp.workout_builders import (
     build_walk_run_json,
     build_z2_walk_json,
     build_strength_json,
+    _lookup_exercise,
 )
 
 SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), "..", "fixtures", "captured")
@@ -51,7 +52,7 @@ def test_build_strength_json_structure():
         name="Full Body A",
         exercises=[
             {"name": "Sentadillas", "sets": 3, "reps": 12, "rest_seconds": 90},
-            {"name": "Flexiones", "sets": 3, "reps": 15, "rest_seconds": 60},
+            {"name": "Curl de biceps", "sets": 3, "reps": 15, "rest_seconds": 60},
         ],
     )
     assert result["workoutName"] == "Full Body A"
@@ -60,7 +61,7 @@ def test_build_strength_json_structure():
     steps = result["workoutSegments"][0]["workoutSteps"]
     # Each exercise is a RepeatGroupDTO
     assert len(steps) == 2
-    # First exercise: RepeatGroup with 3 iterations
+    # First exercise: catalog exercise (Sentadillas) maps to Garmin codes
     assert steps[0]["type"] == "RepeatGroupDTO"
     assert steps[0]["numberOfIterations"] == 3
     assert steps[0]["skipLastRestStep"] is True
@@ -68,6 +69,53 @@ def test_build_strength_json_structure():
     assert len(nested) == 2  # work + rest
     assert nested[0]["endCondition"]["conditionTypeKey"] == "reps"
     assert nested[0]["endConditionValue"] == 12.0
-    assert nested[0]["exerciseName"] == "Sentadillas"
+    assert nested[0]["category"] == "SQUAT"
+    assert nested[0]["exerciseName"] == "SQUAT"
     assert nested[1]["stepType"]["stepTypeKey"] == "rest"
     assert nested[1]["endConditionValue"] == 90.0
+    # Second exercise: unknown exercise falls back to free-text exerciseName
+    nested2 = steps[1]["workoutSteps"]
+    assert nested2[0]["exerciseName"] == "Curl de biceps"
+    assert "category" not in nested2[0]
+
+
+def test_lookup_exercise_spanish_alias():
+    category, exercise_name = _lookup_exercise("Sentadillas")
+    assert category == "SQUAT"
+    assert exercise_name == "SQUAT"
+
+
+def test_lookup_exercise_english_catalog():
+    category, exercise_name = _lookup_exercise("Barbell Bench Press")
+    assert category == "BENCH_PRESS"
+    assert exercise_name == "BARBELL_BENCH_PRESS"
+
+
+def test_lookup_exercise_fallback():
+    category, exercise_name = _lookup_exercise("Ejercicio Inventado")
+    assert category is None
+    assert exercise_name is None
+
+
+def test_build_strength_json_time_based_exercise():
+    """Time-based exercises (isometric) use conditionTypeKey='time' instead of 'reps'."""
+    result = build_strength_json(
+        name="Core Session",
+        exercises=[
+            {"name": "Plank", "sets": 3, "duration_seconds": 45, "rest_seconds": 60},
+            {"name": "Squat", "sets": 3, "reps": 10, "rest_seconds": 90},
+        ],
+    )
+    steps = result["workoutSegments"][0]["workoutSteps"]
+    # First exercise: time-based (plank)
+    plank_work = steps[0]["workoutSteps"][0]
+    assert plank_work["endCondition"]["conditionTypeKey"] == "time"
+    assert plank_work["endConditionValue"] == 45.0
+    assert plank_work["description"] == "Plank: 3x45s"
+    assert plank_work["category"] == "PLANK"
+    assert plank_work["exerciseName"] == "PLANK"
+    # Second exercise: rep-based (squat)
+    squat_work = steps[1]["workoutSteps"][0]
+    assert squat_work["endCondition"]["conditionTypeKey"] == "reps"
+    assert squat_work["endConditionValue"] == 10.0
+    assert squat_work["description"] == "Squat: 3x10"

@@ -5,10 +5,18 @@ These tools construct the internal Garmin Connect JSON internally and delegate
 to the existing upload_workout / schedule_workout endpoints.
 """
 import json
-from typing import Any, Dict, List, Optional
+import os
+from typing import Any, Dict, List, Optional, Tuple
 
 # The garmin_client will be set by the main file
 garmin_client = None
+
+# Load full Garmin exercise catalog (English names → {category, exerciseName})
+_CATALOG_PATH = os.path.join(os.path.dirname(__file__), "data", "garmin_exercises.json")
+_EXERCISE_CATALOG_EN: Dict[str, Dict[str, str]] = {}
+if os.path.exists(_CATALOG_PATH):
+    with open(_CATALOG_PATH, "r", encoding="utf-8") as _f:
+        _EXERCISE_CATALOG_EN = json.load(_f)
 
 
 def configure(client):
@@ -168,10 +176,44 @@ def build_z2_walk_json(
     }
 
 
-# Simplified internal exercise catalog (English → Garmin exerciseName key or fallback)
-# Garmin strength workouts use exerciseName as a free-text label when the exercise
-# is not in their catalog. For structured strength, we use "Other" (generic) and
-# put the user name in description / exerciseName.
+# Spanish → Garmin Connect exercise catalog mapping.
+# Validated by creating workouts via API and verifying that Garmin preserves
+# category + exerciseName. If Garmin returns nulls, the code is invalid.
+EXERCISE_CATALOG_ES = {
+    "Plancha": {"category": "PLANK", "exerciseName": "PLANK"},
+    "Sentadillas": {"category": "SQUAT", "exerciseName": "SQUAT"},
+    "Flexiones": {"category": "PUSH_UP", "exerciseName": "PUSH_UP"},
+    "Dominadas": {"category": "PULL_UP", "exerciseName": "PULL_UP"},
+    "Zancadas": {"category": "LUNGE", "exerciseName": "LUNGE"},
+    "Abdominales": {"category": "CRUNCH", "exerciseName": "CRUNCH_CHOP"},
+    "Peso muerto": {"category": "DEADLIFT", "exerciseName": "BARBELL_DEADLIFT"},
+    "Press banca": {"category": "BENCH_PRESS", "exerciseName": "BARBELL_BENCH_PRESS"},
+    "Press militar": {"category": "SHOULDER_PRESS", "exerciseName": "DUMBBELL_SHOULDER_PRESS"},
+}
+
+
+def _lookup_exercise(ex_name: str) -> Tuple[Optional[str], Optional[str]]:
+    """Lookup an exercise name in the Garmin catalog.
+
+    Priority:
+      1. Spanish aliases (EXERCISE_CATALOG_ES)
+      2. English names from full Garmin catalog (_EXERCISE_CATALOG_EN)
+      3. Return (None, None) for fallback
+
+    Returns (category, exerciseName) if found, otherwise (None, None).
+    """
+    # 1. Try Spanish aliases first
+    mapping = EXERCISE_CATALOG_ES.get(ex_name)
+    if mapping:
+        return mapping.get("category"), mapping.get("exerciseName")
+
+    # 2. Try English names from full catalog
+    mapping = _EXERCISE_CATALOG_EN.get(ex_name)
+    if mapping:
+        return mapping.get("category"), mapping.get("exerciseName")
+
+    return None, None
+
 
 def build_strength_json(
     name: str,
@@ -194,21 +236,43 @@ def build_strength_json(
         sets = int(ex.get("sets", 1))
         reps = int(ex.get("reps", 1))
         rest_seconds = int(ex.get("rest_seconds", 60))
+        duration_seconds = ex.get("duration_seconds")  # Optional: for time-based exercises (plank, etc.)
+
+        category, exercise_name_key = _lookup_exercise(ex_name)
 
         nested_steps: List[dict] = []
         nested_order = 1
 
-        # Work step (reps target)
-        nested_steps.append({
-            "type": "ExecutableStepDTO",
-            "stepOrder": nested_order,
-            "stepType": {"stepTypeId": 3, "stepTypeKey": "interval"},
-            "description": f"{ex_name}: {sets}x{reps}",
-            "endCondition": {"conditionTypeId": 10, "conditionTypeKey": "reps", "displayOrder": 10, "displayable": True},
-            "endConditionValue": float(reps),
-            "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
-            "exerciseName": ex_name,
-        })
+        # Work step (reps or time target)
+        if duration_seconds is not None:
+            # Time-based exercise (isometric)
+            duration = float(duration_seconds)
+            work_step: dict = {
+                "type": "ExecutableStepDTO",
+                "stepOrder": nested_order,
+                "stepType": {"stepTypeId": 3, "stepTypeKey": "interval"},
+                "description": f"{ex_name}: {sets}x{int(duration)}s",
+                "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time", "displayOrder": 2, "displayable": True},
+                "endConditionValue": duration,
+                "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
+            }
+        else:
+            # Rep-based exercise
+            work_step = {
+                "type": "ExecutableStepDTO",
+                "stepOrder": nested_order,
+                "stepType": {"stepTypeId": 3, "stepTypeKey": "interval"},
+                "description": f"{ex_name}: {sets}x{reps}",
+                "endCondition": {"conditionTypeId": 10, "conditionTypeKey": "reps", "displayOrder": 10, "displayable": True},
+                "endConditionValue": float(reps),
+                "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
+            }
+        if category is not None and exercise_name_key is not None:
+            work_step["category"] = category
+            work_step["exerciseName"] = exercise_name_key
+        else:
+            work_step["exerciseName"] = ex_name
+        nested_steps.append(work_step)
         nested_order += 1
 
         # Rest step
@@ -369,6 +433,64 @@ def register_tools(app):
             return json.dumps(result, indent=2)
         except Exception as e:
             return f"Error creating strength workout: {str(e)}"
+
+    @app.tool()
+    async def search_exercises(query: str, limit: int = 20) -> str:
+        """Search available exercises in the Garmin Connect catalog.
+
+        Use this to find the exact English name of an exercise before calling
+        create_strength_workout. The catalog contains 1500+ exercises.
+
+        Args:
+            query: Partial exercise name to search for (e.g., "squat", "bench", "plank").
+                   Case-insensitive.
+            limit: Maximum number of results to return (default 20).
+
+        Returns:
+            JSON list of matching exercises with their exact names.
+        """
+        try:
+            q = query.strip().lower()
+            matches = []
+
+            # Search Spanish aliases
+            for name_es, mapping in EXERCISE_CATALOG_ES.items():
+                if q in name_es.lower():
+                    matches.append({
+                        "name": name_es,
+                        "language": "es",
+                        "category": mapping["category"],
+                        "exerciseName": mapping["exerciseName"],
+                    })
+
+            # Search English catalog
+            for name_en, mapping in _EXERCISE_CATALOG_EN.items():
+                if q in name_en.lower():
+                    matches.append({
+                        "name": name_en,
+                        "language": "en",
+                        "category": mapping["category"],
+                        "exerciseName": mapping["exerciseName"],
+                    })
+
+            # Deduplicate by exerciseName and sort
+            seen = set()
+            unique = []
+            for m in matches:
+                key = (m["category"], m["exerciseName"])
+                if key not in seen:
+                    seen.add(key)
+                    unique.append(m)
+
+            unique = sorted(unique, key=lambda x: x["name"])[:limit]
+
+            return json.dumps({
+                "query": query,
+                "total_matches": len(unique),
+                "exercises": unique,
+            }, indent=2)
+        except Exception as e:
+            return f"Error searching exercises: {str(e)}"
 
     @app.tool()
     async def schedule_week(week: List[Dict[str, Any]]) -> str:
