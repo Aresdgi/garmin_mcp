@@ -176,6 +176,69 @@ def build_z2_walk_json(
     }
 
 
+def build_continuous_run_json(
+    name: str,
+    duration_min: int,
+    hr_min: int,
+    hr_max: int,
+    warmup_min: int = 0,
+    cooldown_min: int = 0,
+) -> dict:
+    """Build the Garmin Connect JSON for a continuous run with a custom HR range."""
+    steps = []
+    step_order = 1
+
+    if warmup_min:
+        steps.append({
+            "type": "ExecutableStepDTO",
+            "stepOrder": step_order,
+            "stepType": {"stepTypeId": 1, "stepTypeKey": "warmup"},
+            "description": f"Warmup {warmup_min} min Z1",
+            "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
+            "endConditionValue": float(warmup_min * 60),
+            "targetType": {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "heart.rate.zone"},
+            "zoneNumber": 1,
+        })
+        step_order += 1
+
+    steps.append({
+        "type": "ExecutableStepDTO",
+        "stepOrder": step_order,
+        "stepType": {"stepTypeId": 3, "stepTypeKey": "interval"},
+        "description": f"Run {duration_min} min {hr_min}-{hr_max} bpm",
+        "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
+        "endConditionValue": float(duration_min * 60),
+        "targetType": {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "heart.rate.zone"},
+        "zoneNumber": 0,
+        "targetValueOne": hr_min,
+        "targetValueTwo": hr_max,
+    })
+    step_order += 1
+
+    if cooldown_min:
+        steps.append({
+            "type": "ExecutableStepDTO",
+            "stepOrder": step_order,
+            "stepType": {"stepTypeId": 2, "stepTypeKey": "cooldown"},
+            "description": f"Cooldown {cooldown_min} min Z1",
+            "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
+            "endConditionValue": float(cooldown_min * 60),
+            "targetType": {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "heart.rate.zone"},
+            "zoneNumber": 1,
+        })
+
+    return {
+        "workoutName": name,
+        "description": f"Run {duration_min} min at {hr_min}-{hr_max} bpm",
+        "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+        "workoutSegments": [{
+            "segmentOrder": 1,
+            "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+            "workoutSteps": steps,
+        }],
+    }
+
+
 # Spanish → Garmin Connect exercise catalog mapping.
 # Validated by creating workouts via API and verifying that Garmin preserves
 # category + exerciseName. If Garmin returns nulls, the code is invalid.
@@ -739,6 +802,49 @@ def register_tools(app):
             return json.dumps(result, indent=2)
         except Exception as e:
             return f"Error creating Z2 walk workout: {str(e)}"
+
+    @app.tool()
+    async def create_continuous_run_workout(
+        name: str,
+        duration_min: int,
+        hr_min: int,
+        hr_max: int,
+        warmup_min: int = 0,
+        cooldown_min: int = 0,
+    ) -> str:
+        """Create a continuous running workout with a custom HR range.
+
+        Args:
+            name: Workout name
+            duration_min: Main running block duration in minutes
+            hr_min: Minimum heart rate in bpm for the custom target range
+            hr_max: Maximum heart rate in bpm for the custom target range
+            warmup_min: Optional warmup duration in minutes at Z1
+            cooldown_min: Optional cooldown duration in minutes at Z1
+        """
+        try:
+            workout_json = build_continuous_run_json(
+                name=name,
+                duration_min=duration_min,
+                hr_min=hr_min,
+                hr_max=hr_max,
+                warmup_min=warmup_min,
+                cooldown_min=cooldown_min,
+            )
+            result = garmin_client.upload_workout(workout_json)
+
+            if isinstance(result, dict):
+                curated = {
+                    "status": "success",
+                    "workout_id": result.get("workoutId"),
+                    "name": result.get("workoutName"),
+                    "message": "Workout uploaded successfully",
+                }
+                curated = {k: v for k, v in curated.items() if v is not None}
+                return json.dumps(curated, indent=2)
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return f"Error creating continuous run workout: {str(e)}"
 
     @app.tool()
     async def create_strength_workout(

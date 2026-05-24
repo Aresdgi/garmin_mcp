@@ -37,11 +37,46 @@ def _fix_hr_zone_step(step: dict) -> None:
         _fix_hr_zone_step(nested)
 
 
+def _validate_custom_hr_range_step(step: dict) -> None:
+    """Validate custom absolute HR ranges for heart.rate.zone targets."""
+    target_type = step.get('targetType', {})
+    target_key = target_type.get('workoutTargetTypeKey', '')
+
+    if target_key == 'heart.rate.zone':
+        zone = step.get('zoneNumber')
+        if zone is None or zone == 0:
+            hr_min = step.get('targetValueOne')
+            hr_max = step.get('targetValueTwo')
+            if hr_min is None or hr_max is None:
+                raise ValueError(
+                    "Custom heart rate ranges require both targetValueOne and targetValueTwo "
+                    "when zoneNumber is 0 or null."
+                )
+            if not isinstance(hr_min, int) or not isinstance(hr_max, int):
+                raise ValueError("Custom heart rate range values must be integers in bpm.")
+            if not 30 <= hr_min <= 250 or not 30 <= hr_max <= 250:
+                raise ValueError("Custom heart rate range values must be between 30 and 250 bpm.")
+            if hr_min >= hr_max:
+                raise ValueError("Custom heart rate range requires targetValueOne < targetValueTwo.")
+            step['zoneNumber'] = 0
+
+    # Recurse into nested steps (RepeatGroupDTO)
+    for nested in step.get('workoutSteps', []):
+        _validate_custom_hr_range_step(nested)
+
+
 def _fix_hr_zone_steps(workout_data: dict) -> None:
     """Walk all workout steps and fix HR zone target mistakes."""
     for segment in workout_data.get('workoutSegments', []):
         for step in segment.get('workoutSteps', []):
             _fix_hr_zone_step(step)
+
+
+def _validate_custom_hr_range_steps(workout_data: dict) -> None:
+    """Walk all workout steps and validate custom HR range targets."""
+    for segment in workout_data.get('workoutSegments', []):
+        for step in segment.get('workoutSteps', []):
+            _validate_custom_hr_range_step(step)
 
 
 def _curate_workout_summary(workout: dict) -> dict:
@@ -333,8 +368,9 @@ def register_tools(app):
         - Use "ExecutableStepDTO" for regular steps (warmup, interval, cooldown, recovery)
         - Use "RepeatGroupDTO" for repeat/interval groups with numberOfIterations
 
-        IMPORTANT: For heart rate zone targets, use "zoneNumber" (1-5), NOT targetValueOne/targetValueTwo.
-        targetValueOne/targetValueTwo are only for absolute value ranges (e.g. pace in m/s, power in watts).
+        IMPORTANT: For heart rate zone targets, use "zoneNumber" (1-5) for Garmin preset zones.
+        For a custom absolute HR range, set "zoneNumber" to 0 or null and provide integer
+        "targetValueOne"/"targetValueTwo" bpm values between 30 and 250, with low < high.
 
         **Available Templates:**
         Instead of building workout JSON from scratch, you can use these MCP resources as starting points:
@@ -366,12 +402,21 @@ def register_tools(app):
             }]
         }
 
+        Example custom HR range target:
+        {
+            "targetType": {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "heart.rate.zone"},
+            "zoneNumber": 0,
+            "targetValueOne": 123,
+            "targetValueTwo": 133
+        }
+
         Args:
             workout_data: Dictionary containing workout structure (name, sport type, segments, etc.)
         """
         try:
             # Fix common mistake: HR zone targets using targetValueOne instead of zoneNumber
             _fix_hr_zone_steps(workout_data)
+            _validate_custom_hr_range_steps(workout_data)
 
             # Pass dict directly - library handles conversion
             result = garmin_client.upload_workout(workout_data)

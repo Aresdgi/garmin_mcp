@@ -297,6 +297,83 @@ async def test_upload_workout_fixes_hr_zone_in_repeat_group(app_with_workouts, m
 
 
 @pytest.mark.asyncio
+async def test_upload_workout_accepts_custom_hr_range(app_with_workouts, mock_garmin_client):
+    """Test upload_workout accepts custom absolute HR range targets."""
+    import json as json_module
+
+    upload_response = {"workoutId": 123460, "workoutName": "Custom HR Range"}
+    mock_garmin_client.upload_workout.return_value = upload_response
+
+    workout_data = {
+        "workoutName": "Custom HR Range",
+        "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+        "workoutSegments": [{
+            "segmentOrder": 1,
+            "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+            "workoutSteps": [{
+                "type": "ExecutableStepDTO",
+                "stepOrder": 1,
+                "stepType": {"stepTypeId": 3, "stepTypeKey": "interval"},
+                "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
+                "endConditionValue": 1500,
+                "targetType": {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "heart.rate.zone"},
+                "zoneNumber": 0,
+                "targetValueOne": 123,
+                "targetValueTwo": 133,
+            }]
+        }]
+    }
+
+    result = await app_with_workouts.call_tool(
+        "upload_workout",
+        {"workout_data": workout_data}
+    )
+
+    called_data = mock_garmin_client.upload_workout.call_args[0][0]
+    step = called_data["workoutSegments"][0]["workoutSteps"][0]
+    assert step["zoneNumber"] == 0
+    assert step["targetValueOne"] == 123
+    assert step["targetValueTwo"] == 133
+
+    result_data = json_module.loads(result[0][0].text)
+    assert result_data["status"] == "success"
+    assert result_data["workout_id"] == 123460
+
+
+@pytest.mark.asyncio
+async def test_upload_workout_rejects_invalid_custom_hr_range(app_with_workouts, mock_garmin_client):
+    """Test upload_workout rejects invalid custom absolute HR range targets."""
+    workout_data = {
+        "workoutName": "Invalid HR Range",
+        "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+        "workoutSegments": [{
+            "segmentOrder": 1,
+            "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+            "workoutSteps": [{
+                "type": "ExecutableStepDTO",
+                "stepOrder": 1,
+                "stepType": {"stepTypeId": 3, "stepTypeKey": "interval"},
+                "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
+                "endConditionValue": 1500,
+                "targetType": {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "heart.rate.zone"},
+                "zoneNumber": None,
+                "targetValueOne": 133,
+                "targetValueTwo": 123,
+            }]
+        }]
+    }
+
+    result = await app_with_workouts.call_tool(
+        "upload_workout",
+        {"workout_data": workout_data}
+    )
+
+    assert "Error uploading workout" in result[0][0].text
+    assert "targetValueOne < targetValueTwo" in result[0][0].text
+    mock_garmin_client.upload_workout.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_get_scheduled_workouts_tool(app_with_workouts, mock_garmin_client):
     """Test get_scheduled_workouts tool - uses GraphQL query"""
     import json as json_module
