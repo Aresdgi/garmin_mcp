@@ -630,6 +630,7 @@ def build_strength_json(
       - category: injected directly into the work step
       - exercise_name: injected directly as exerciseName
       - weight: grams, injected as Garmin's kilogram weightValue + weightUnit
+      - rest_type: "time" (default) or "open" for lap-button rest
 
     The last rest step of each exercise is skipped via skipLastRestStep.
     """
@@ -641,10 +642,14 @@ def build_strength_json(
         sets = int(ex.get("sets", 1))
         reps = int(ex.get("reps", 1))
         rest_seconds = int(ex.get("rest_seconds", 60))
+        rest_type = (ex.get("rest_type") or "time").strip().lower()
         duration_seconds = ex.get("duration_seconds")  # Optional: for time-based exercises (plank, etc.)
         explicit_category = ex.get("category")
         explicit_exercise_name = ex.get("exercise_name")
         weight = ex.get("weight")
+
+        if rest_type not in ("time", "open"):
+            raise ValueError("rest_type must be 'time' or 'open'.")
 
         if explicit_category is not None and explicit_exercise_name is not None:
             category = explicit_category
@@ -695,15 +700,26 @@ def build_strength_json(
         nested_order += 1
 
         # Rest step
-        nested_steps.append({
-            "type": "ExecutableStepDTO",
-            "stepOrder": nested_order,
-            "stepType": {"stepTypeId": 5, "stepTypeKey": "rest", "displayOrder": 5},
-            "description": f"Rest {rest_seconds}s",
-            "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time", "displayOrder": 2, "displayable": True},
-            "endConditionValue": float(rest_seconds),
-            "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
-        })
+        if rest_type == "open":
+            nested_steps.append({
+                "type": "ExecutableStepDTO",
+                "stepOrder": nested_order,
+                "stepType": {"stepTypeId": 5, "stepTypeKey": "rest", "displayOrder": 5},
+                "description": None,
+                "endCondition": {"conditionTypeId": 1, "conditionTypeKey": "lap.button", "displayOrder": 1, "displayable": True},
+                "endConditionValue": 10.0,
+                "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
+            })
+        else:
+            nested_steps.append({
+                "type": "ExecutableStepDTO",
+                "stepOrder": nested_order,
+                "stepType": {"stepTypeId": 5, "stepTypeKey": "rest", "displayOrder": 5},
+                "description": f"Rest {rest_seconds}s",
+                "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time", "displayOrder": 2, "displayable": True},
+                "endConditionValue": float(rest_seconds),
+                "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
+            })
 
         steps.append({
             "type": "RepeatGroupDTO",
@@ -878,7 +894,8 @@ def register_tools(app):
         Args:
             name: Workout name
             exercises: List of dicts with keys: name, sets, reps, rest_seconds.
-                       Optional keys: category, exercise_name, weight (grams).
+                       Optional keys: category, exercise_name, weight (grams),
+                       rest_type ("time" or "open").
         """
         try:
             workout_json = build_strength_json(name=name, exercises=exercises)
@@ -913,7 +930,8 @@ def register_tools(app):
             workout_id: Existing Garmin workout ID to update in place
             name: Workout name
             exercises: List of dicts with keys: name, sets, reps, rest_seconds.
-                       Optional keys: category, exercise_name, weight (grams).
+                       Optional keys: category, exercise_name, weight (grams),
+                       rest_type ("time" or "open").
         """
         try:
             workout_json = build_strength_json(name=name, exercises=exercises)
