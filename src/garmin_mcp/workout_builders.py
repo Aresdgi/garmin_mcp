@@ -629,7 +629,7 @@ def build_strength_json(
     Exercise items may provide optional Garmin taxonomy fields:
       - category: injected directly into the work step
       - exercise_name: injected directly as exerciseName
-      - weight: injected as weightValue in grams
+      - weight: grams, injected as Garmin's kilogram weightValue + weightUnit
 
     The last rest step of each exercise is skipped via skipLastRestStep.
     """
@@ -685,7 +685,12 @@ def build_strength_json(
         else:
             work_step["exerciseName"] = ex_name
         if weight is not None:
-            work_step["weightValue"] = int(weight)
+            work_step["weightValue"] = float(weight) / 1000.0
+            work_step["weightUnit"] = {
+                "unitId": 8,
+                "unitKey": "kilogram",
+                "factor": 1000.0,
+            }
         nested_steps.append(work_step)
         nested_order += 1
 
@@ -891,6 +896,53 @@ def register_tools(app):
             return json.dumps(result, indent=2)
         except Exception as e:
             return f"Error creating strength workout: {str(e)}"
+
+    @app.tool()
+    async def update_strength_workout(
+        workout_id: int,
+        name: str,
+        exercises: List[Dict[str, Any]],
+    ) -> str:
+        """Update an existing strength workout in Garmin Connect.
+
+        Rebuilds the strength workout payload using the same exercise format as
+        create_strength_workout, injects workoutId, and sends it to Garmin's
+        workout update endpoint.
+
+        Args:
+            workout_id: Existing Garmin workout ID to update in place
+            name: Workout name
+            exercises: List of dicts with keys: name, sets, reps, rest_seconds.
+                       Optional keys: category, exercise_name, weight (grams).
+        """
+        try:
+            workout_json = build_strength_json(name=name, exercises=exercises)
+            workout_json["workoutId"] = int(workout_id)
+
+            url = f"{garmin_client.garmin_workouts}/workout/{int(workout_id)}"
+            response = garmin_client.garth.put(
+                "connectapi",
+                url,
+                json=workout_json,
+                api=True,
+            )
+            if response.status_code in (200, 204) and not response.text.strip():
+                result = {"workoutId": workout_id, "workoutName": name}
+            else:
+                result = response.json()
+
+            if isinstance(result, dict):
+                curated = {
+                    "status": "success",
+                    "workout_id": result.get("workoutId", workout_id),
+                    "name": result.get("workoutName"),
+                    "message": "Workout updated successfully",
+                }
+                curated = {k: v for k, v in curated.items() if v is not None}
+                return json.dumps(curated, indent=2)
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return f"Error updating strength workout: {str(e)}"
 
     @app.tool()
     async def search_exercises(query: str, limit: int = 20) -> str:
