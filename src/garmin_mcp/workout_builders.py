@@ -626,6 +626,11 @@ def build_strength_json(
       - ExecutableStepDTO (interval) targeting reps (conditionTypeId: 10)
       - ExecutableStepDTO (rest) with configured rest time
 
+    Exercise items may provide optional Garmin taxonomy fields:
+      - category: injected directly into the work step
+      - exercise_name: injected directly as exerciseName
+      - weight: injected as weightValue in grams
+
     The last rest step of each exercise is skipped via skipLastRestStep.
     """
     steps: List[dict] = []
@@ -637,8 +642,15 @@ def build_strength_json(
         reps = int(ex.get("reps", 1))
         rest_seconds = int(ex.get("rest_seconds", 60))
         duration_seconds = ex.get("duration_seconds")  # Optional: for time-based exercises (plank, etc.)
+        explicit_category = ex.get("category")
+        explicit_exercise_name = ex.get("exercise_name")
+        weight = ex.get("weight")
 
-        category, exercise_name_key = _lookup_exercise(ex_name)
+        if explicit_category is not None and explicit_exercise_name is not None:
+            category = explicit_category
+            exercise_name_key = explicit_exercise_name
+        else:
+            category, exercise_name_key = _lookup_exercise(ex_name)
 
         nested_steps: List[dict] = []
         nested_order = 1
@@ -672,6 +684,8 @@ def build_strength_json(
             work_step["exerciseName"] = exercise_name_key
         else:
             work_step["exerciseName"] = ex_name
+        if weight is not None:
+            work_step["weightValue"] = int(weight)
         nested_steps.append(work_step)
         nested_order += 1
 
@@ -858,7 +872,8 @@ def register_tools(app):
 
         Args:
             name: Workout name
-            exercises: List of dicts with keys: name, sets, reps, rest_seconds
+            exercises: List of dicts with keys: name, sets, reps, rest_seconds.
+                       Optional keys: category, exercise_name, weight (grams).
         """
         try:
             workout_json = build_strength_json(name=name, exercises=exercises)
