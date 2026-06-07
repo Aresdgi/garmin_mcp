@@ -209,7 +209,6 @@ def build_continuous_run_json(
         "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
         "endConditionValue": float(duration_min * 60),
         "targetType": {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "heart.rate.zone"},
-        "zoneNumber": 0,
         "targetValueOne": hr_min,
         "targetValueTwo": hr_max,
     })

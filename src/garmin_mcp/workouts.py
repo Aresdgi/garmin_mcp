@@ -58,7 +58,9 @@ def _validate_custom_hr_range_step(step: dict) -> None:
                 raise ValueError("Custom heart rate range values must be between 30 and 250 bpm.")
             if hr_min >= hr_max:
                 raise ValueError("Custom heart rate range requires targetValueOne < targetValueTwo.")
-            step['zoneNumber'] = 0
+            # Garmin descarta targetValueOne/Two si hay zoneNumber (aunque sea 0).
+            # Los rangos de FC personalizados se envían SIN zoneNumber.
+            step.pop('zoneNumber', None)
 
     # Recurse into nested steps (RepeatGroupDTO)
     for nested in step.get('workoutSteps', []):

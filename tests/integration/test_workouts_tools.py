@@ -331,7 +331,7 @@ async def test_upload_workout_accepts_custom_hr_range(app_with_workouts, mock_ga
 
     called_data = mock_garmin_client.upload_workout.call_args[0][0]
     step = called_data["workoutSegments"][0]["workoutSteps"][0]
-    assert step["zoneNumber"] == 0
+    assert "zoneNumber" not in step
     assert step["targetValueOne"] == 123
     assert step["targetValueTwo"] == 133
 

@@ -64,7 +64,7 @@ def test_build_continuous_run_json_custom_hr_range():
     assert len(steps) == 3
     assert steps[0]["zoneNumber"] == 1
     assert steps[1]["stepType"]["stepTypeId"] == 3
-    assert steps[1]["zoneNumber"] == 0
+    assert "zoneNumber" not in steps[1]
     assert steps[1]["targetValueOne"] == 123
     assert steps[1]["targetValueTwo"] == 133
     assert steps[1]["endConditionValue"] == 1500.0
